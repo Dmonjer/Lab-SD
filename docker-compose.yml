@@ -1,0 +1,139 @@
+version: "3.9"
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - sd-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    networks:
+      - sd-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: >
+      redis-server
+      --maxmemory ${CACHE_MAX_MEMORY:-200mb}
+      --maxmemory-policy ${CACHE_EVICTION_POLICY:-allkeys-lru}
+    ports:
+      - "6379:6379"
+    networks:
+      - sd-net
+
+  response_generator:
+    build: ./response_generator
+    container_name: response_generator
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PROCESSING_DELAY_MS=${PROCESSING_DELAY_MS:-100}
+      - KAFKA_BROKER=kafka:9092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - METRICS_URL=http://metrics_storage:8003
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - kafka
+      - redis
+      - metrics_storage
+    networks:
+      - sd-net
+
+  cache_service:
+    build: ./cache_service
+    container_name: cache_service
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+      - METRICS_URL=http://metrics_storage:8003
+      - CACHE_TTL=${CACHE_TTL:-300}
+      - KAFKA_GROUP_ID=${KAFKA_GROUP_ID:-cache_service_group}
+      - KAFKA_OFFSET_RESET=${KAFKA_OFFSET_RESET:-earliest}
+    ports:
+      - "8002:8002"
+    depends_on:
+      - redis
+      - kafka
+      - metrics_storage
+    networks:
+      - sd-net
+
+  consumer_worker:
+    build: ./cache_service
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+      - METRICS_URL=http://metrics_storage:8003
+      - CACHE_TTL=${CACHE_TTL:-300}
+      - KAFKA_GROUP_ID=${KAFKA_GROUP_ID:-cache_service_group}
+      - KAFKA_OFFSET_RESET=${KAFKA_OFFSET_RESET:-earliest}
+    depends_on:
+      - redis
+      - kafka
+      - metrics_storage
+      - response_generator
+    networks:
+      - sd-net
+
+  traffic_generator:
+    build: ./traffic_generator
+    container_name: traffic_generator
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - CACHE_URL=http://cache_service:8002
+      - METRICS_URL=http://metrics_storage:8003
+      - DISTRIBUTION=${DISTRIBUTION:-zipf}
+      - N_REQUESTS=${N_REQUESTS:-1000}
+      - ZIPF_ALPHA=${ZIPF_ALPHA:-1.5}
+      - REQUEST_RATE=${REQUEST_RATE:-10}
+    depends_on:
+      - kafka
+      - metrics_storage
+    ports:
+      - "8004:8004"
+    networks:
+      - sd-net
+
+  metrics_storage:
+    build: ./metrics_storage
+    container_name: metrics_storage
+    volumes:
+      - metrics_volume:/metrics
+    ports:
+      - "8003:8003"
+    networks:
+      - sd-net
+
+volumes:
+  dataset_volume:
+  metrics_volume:
+
+networks:
+  sd-net:
+    driver: bridge

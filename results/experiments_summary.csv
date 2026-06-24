@@ -1,0 +1,12 @@
+experiment,distribution,eviction_policy,maxmemory,ttl,hit_rate,total_hits,total_misses,latency_p50_ms,latency_p95_ms,evicted_keys
+dist_comparison,zipf,allkeys-lru,200mb,300,97.0,485,15,878.375,1288.515,0
+dist_comparison,uniform,allkeys-lru,200mb,300,90.2,451,49,3572.224,30961.825,0
+policy_comparison,zipf,LRU,200mb,300,95.4,477,23,1182.413,9328.143,0
+policy_comparison,zipf,LFU,200mb,300,97.0,485,15,1201.666,4301.234,0
+policy_comparison,zipf,FIFO/Random,200mb,300,97.0,485,15,890.007,2790.467,0
+size_comparison,zipf,LRU,50mb,300,92.6,463,37,2810.969,24434.299,0
+size_comparison,zipf,LRU,200mb,300,94.8,474,26,878.891,12344.556,0
+size_comparison,zipf,LRU,500mb,300,95.8,479,21,1788.048,9321.561,0
+ttl_comparison,zipf,LRU,200mb,30,93.87,873,57,1488.84,3878.065,0
+ttl_comparison,zipf,LRU,200mb,60,86.89,762,115,3515.867,17833.979,0
+ttl_comparison,zipf,LRU,200mb,120,83.31,724,145,4646.365,36941.448,0
