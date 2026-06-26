@@ -1,0 +1,2 @@
+pyspark==3.4.1
+elasticsearch==8.11.1
