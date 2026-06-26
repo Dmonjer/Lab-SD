@@ -123,10 +123,63 @@ services:
   metrics_storage:
     build: ./metrics_storage
     container_name: metrics_storage
+    depends_on:
+      - kafka
     volumes:
       - metrics_volume:/metrics
     ports:
       - "8003:8003"
+    networks:
+      - sd-net
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    networks:
+      - sd-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - sd-net
+
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-setup
+    depends_on:
+      - kafka
+    command: >
+      bash -c "echo Waiting for Kafka to be ready... &&
+      cub kafka-ready -b kafka:9092 1 30 &&
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1 --topic metrics-topic &&
+      echo Topic created."
+    networks:
+      - sd-net
+
+  spark_processor:
+    build: ./spark_processor
+    container_name: spark_processor
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+    depends_on:
+      - kafka
+      - kafka-setup
+      - elasticsearch
     networks:
       - sd-net
 
